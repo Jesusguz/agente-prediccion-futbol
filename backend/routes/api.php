@@ -3,7 +3,6 @@
 use App\Services\FootballService;
 use App\Services\PredictionAgent;
 use Illuminate\Support\Facades\Route;
-
 Route::get('/analisis-agente', function () {
     try {
         $service = new App\Services\FootballService();
@@ -14,24 +13,33 @@ Route::get('/analisis-agente', function () {
         if (!isset($rawData['response'])) {
             return response()->json([
                 'status' => 'debug',
-                'message' => 'API externa no respondió con datos',
-                'raw' => substr(json_encode($rawData), 0, 200)
-            ], 200); 
+                'message' => 'La API externa no respondió con la estructura esperada.',
+                'raw_preview' => substr(json_encode($rawData), 0, 150)
+            ], 200);
         }
 
         $matches = collect($rawData['response'])
             ->flatten(1)
             ->filter(function($item) {
-                if (!isset($item['home']) || !isset($item['status'])) return false;
+                // Validación de seguridad inicial
+                if (!is_array($item) || !isset($item['home']) || !isset($item['status'])) {
+                    return false;
+                }
                 
-                $reason = strtoupper($item['status']['reason'] ?? '');
-                return !in_array($reason, ['FT', 'FINISHED', 'ENDED', 'AET', 'PEN']);
+                // CORRECCIÓN: Validamos que sea string antes de usar strtoupper
+                $rawReason = $item['status']['reason'] ?? '';
+                $reason = is_string($rawReason) ? strtoupper($rawReason) : '';
+
+                // Filtro de estados terminados
+                $terminados = ['FT', 'FINISHED', 'ENDED', 'AET', 'PEN', 'POSTP'];
+                return !in_array($reason, $terminados);
             })
             ->values()
             ->toArray();
 
         return response()->json([
             'status' => 'success',
+            'total_procesados' => count($matches),
             'predicciones' => $agent->analyzeMatches($matches)
         ]);
 
