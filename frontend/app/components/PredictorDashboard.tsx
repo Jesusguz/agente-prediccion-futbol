@@ -115,7 +115,7 @@ export default function PredictorDashboard() {
               <div key={`rec-${m.game}-${i}`} className="p-5 bg-slate-800 border-l-4 border-yellow-500 rounded-r-xl shadow-lg hover:bg-slate-700/50 transition">
                 <div className="flex justify-between text-[10px] text-slate-400 mb-2">
                   <span className="bg-red-900/40 text-red-400 px-2 py-0.5 rounded font-bold">
-                    {m.time || 'LIVE'}
+                    {m.time && m.time !== "" ? m.time : 'FINALIZADO?'}
                   </span>
                   <span className="uppercase">{m.intensity}</span>
                 </div>

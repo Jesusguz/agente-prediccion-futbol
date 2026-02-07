@@ -10,56 +10,43 @@ Route::get('/analisis-agente', function () {
         $service = new App\Services\FootballService();
         $agent = new App\Services\PredictionAgent();
 
+        // Obtenemos los datos del día
         $rawData = $service->getMatchesByDate(date('Ymd'));
         
-        if (!isset($rawData['response'])) {
-            return response()->json([
-                'status' => 'debug',
-                'message' => 'API externa no respondió con la estructura esperada.',
-                'raw_preview' => substr(json_encode($rawData), 0, 150)
-            ], 200);
-        }
+        if (!isset($rawData['response'])) return response()->json(['status' => 'debug', 'message' => 'No hay response']);
 
-        $matches = collect($rawData['response'])
-            ->flatten(1)
-            ->filter(function($item) {
-                // 1. Validación de seguridad básica
-                if (!is_array($item) || !isset($item['home']) || !isset($item['status'])) {
-                    return false;
-                }
-                
-                // 2. CORRECCIÓN DEL ERROR: Validamos que 'reason' sea string antes de transformar
-                $rawReason = $item['status']['reason'] ?? '';
-                $reason = is_string($rawReason) ? strtoupper($rawReason) : '';
-                $statusType = strtolower($item['status']['type'] ?? '');
+        $allMatches = collect($rawData['response'])->flatten(1);
 
-                // 3. Filtro estricto de estados terminados
-                $terminados = ['FT', 'FINISHED', 'ENDED', 'AET', 'PEN', 'FULL TIME'];
-                return !in_array($reason, $terminados) && $statusType !== 'finished';
-            })
-            ->map(function($match) {
-                // Aseguramos que el tiempo sea un string legible para el Frontend
-                $match['time'] = is_string($match['status']['reason'] ?? null) 
-                    ? $match['status']['reason'] 
-                    : 'Live';
-                return $match;
-            })
-            ->values()
-            ->toArray();
+        // --- DEPURACIÓN AGRESIVA ---
+        // Vamos a capturar TODO el objeto del primer partido para ver por qué 'status' sale vacío
+        $primerPartido = $allMatches->first();
+
+        $matches = $allMatches->filter(function($item) {
+            if (!is_array($item)) return false;
+
+            // Buscamos cualquier indicio de que el partido NO ha terminado
+            // Algunas APIs usan 'status_id', 'period', o 'time.status'
+            $status = $item['status']['type'] ?? $item['status'] ?? 'unknown';
+            $reason = $item['status']['reason'] ?? '';
+
+            // Si el marcador ya tiene goles y el status está vacío, 
+            // es muy probable que sea un partido finalizado.
+            $hasScore = isset($item['home']['score']) && $item['home']['score'] > 0;
+            
+            // Filtro temporal: Si no trae status claro, sospechamos de él
+            return !in_array(strtoupper((string)$reason), ['FT', 'FINISHED', 'END']);
+        })->values();
 
         return response()->json([
             'status' => 'success',
-            'debug_info' => array_slice($matches, 0, 5), // Muestra los primeros 5 para depurar
-            'total_activos' => count($matches),
-            'predicciones' => $agent->analyzeMatches($matches)
+            'debug_raw' => $primerPartido, // ESTO NOS DIRÁ LA VERDAD
+            'predicciones' => $agent->analyzeMatches($matches->toArray())
         ]);
 
     } catch (\Throwable $e) {
         return response()->json([
             'status' => 'fatal_error',
-            'message' => $e->getMessage(),
-            'file' => $e->getFile(),
-            'line' => $e->getLine()
-        ], 200); 
+            'message' => $e->getMessage()
+        ], 200);
     }
 });
