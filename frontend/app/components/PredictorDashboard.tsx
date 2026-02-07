@@ -17,7 +17,8 @@ export default function PredictorDashboard() {
     try {
     
         const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-        const response = await fetch(`${baseUrl}/api/analisis-agente`); 
+        //const response = await fetch(`${baseUrl}/api/analisis-agente`); 
+        const response = await fetch('https://agente-prediccion-futbol-production.up.railway.app/analisis-agente');
         
         if (!response.ok) throw new Error('Error en la red');
         
