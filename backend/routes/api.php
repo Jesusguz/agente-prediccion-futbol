@@ -1,22 +1,29 @@
 <?php
 
 use App\Services\FootballService;
-use Illuminate\Support\Facades\Route;
-use Illuminate\Support\Facades\Log;
-
 use App\Services\PredictionAgent;
+use Illuminate\Support\Facades\Route;
 
 Route::get('/analisis-agente', function () {
     $service = new FootballService();
     $agent = new PredictionAgent();
 
-    $rawData = $service->getMatchesByDate('20260206');
+
+    $rawData = $service->getMatchesByDate(date('Ymd'));
     
-    $matches = $rawData['response']['matches'] ?? []; 
+    $matches = [];
+    if (isset($rawData['response'])) {
+        
+        $matches = collect($rawData['response'])->flatten(1)->filter(function($item) {
+            return isset($item['home']);
+        })->toArray();
+    }
 
     return response()->json([
         'agente_name' => 'Lía Predictor V1',
-        'status' => 'Conectado',
-        'analisis' => $agent->analyzeMatches($matches)
+        'status' => 'Analizando ligas internacionales',
+        'fecha' => date('d-m-Y'),
+        'total_partidos' => count($matches),
+        'predicciones' => $agent->analyzeMatches($matches)
     ]);
 });
