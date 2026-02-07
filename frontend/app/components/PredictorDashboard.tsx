@@ -15,6 +15,7 @@ interface DebugInfo {
   message: string;
   file?: string;
   line?: number;
+  debug_info?: any[];
 }
 
 export default function PredictorDashboard() {
@@ -24,7 +25,6 @@ export default function PredictorDashboard() {
 
   const fetchPredictions = async () => {
     try {
-      // Mantenemos la carga visual si es la primera vez
       const response = await fetch('https://agente-prediccion-futbol-production.up.railway.app/analisis-agente');
       
       if (!response.ok) {
@@ -33,12 +33,11 @@ export default function PredictorDashboard() {
 
       const json = await response.json();
 
-      // Si el backend envió un error controlado (fatal_error o debug)
       if (json.status === 'fatal_error' || json.status === 'debug' || json.status === 'error') {
         setDebugInfo(json);
         setData([]);
       } else {
-        setDebugInfo(null);
+        setDebugInfo(json.debug_info ? json : null);
         setData(json.predicciones || []);
       }
     } catch (error: any) {
@@ -54,7 +53,7 @@ export default function PredictorDashboard() {
 
   useEffect(() => {
     fetchPredictions();
-    const interval = setInterval(fetchPredictions, 60000); // Actualiza cada 1 minuto
+    const interval = setInterval(fetchPredictions, 60000);
     return () => clearInterval(interval);
   }, []);
 
@@ -84,22 +83,28 @@ export default function PredictorDashboard() {
         </button>
       </header>
 
-      {/* MONITOR DE DEBUG VISUAL */}
       {debugInfo && (
         <div className="p-4 bg-red-950/30 border border-red-500/50 rounded-xl font-mono text-xs text-red-200">
           <div className="flex items-center gap-2 mb-2">
             <span className="w-2 h-2 bg-red-500 rounded-full animate-ping"></span>
-            <p className="font-bold text-red-500">SISTEMA EN PAUSA - DEBUG MODE</p>
+            <p className="font-bold text-red-500">MONITOR DE DEPURACIÓN</p>
           </div>
           <p><span className="text-red-400">Mensaje:</span> {debugInfo.message}</p>
-          {debugInfo.line && (
-            <p className="mt-1"><span className="text-red-400">Ubicación:</span> {debugInfo.file} (Línea {debugInfo.line})</p>
+          {debugInfo.debug_info && (
+            <div className="mt-4 border-t border-red-500/30 pt-2 text-[10px]">
+              <p className="font-bold text-yellow-500 mb-2 underline">ESTADOS EN API (MUESTRA):</p>
+              <ul className="space-y-1">
+                {debugInfo.debug_info.map((info: any, idx: number) => (
+                  <li key={idx} className="bg-black/20 p-1">
+                    {info.name} → <span className="text-blue-400">Type: {info.type}</span> | <span className="text-green-400">Reason: {info.reason}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
-          <p className="mt-2 text-[10px] text-red-500/70 italic italic">Este error se muestra aquí para ahorrar logs en Railway.</p>
         </div>
       )}
 
-      {/* SECCIÓN TOP RECOMENDADOS */}
       {recomendados.length > 0 && (
         <section>
           <h2 className="text-xl font-bold text-yellow-500 uppercase tracking-widest mb-4 flex items-center gap-2">
@@ -109,7 +114,7 @@ export default function PredictorDashboard() {
             {recomendados.map((m, i) => (
               <div key={`rec-${m.game}-${i}`} className="p-5 bg-slate-800 border-l-4 border-yellow-500 rounded-r-xl shadow-lg hover:bg-slate-700/50 transition">
                 <div className="flex justify-between text-[10px] text-slate-400 mb-2">
-                  <span className="bg-red-900/40 text-red-400 px-2 py-0.5 rounded font-bold animate-pulse">
+                  <span className="bg-red-900/40 text-red-400 px-2 py-0.5 rounded font-bold">
                     {m.time || 'LIVE'}
                   </span>
                   <span className="uppercase">{m.intensity}</span>
@@ -125,7 +130,6 @@ export default function PredictorDashboard() {
         </section>
       )}
 
-      {/* SECCIÓN GENERAL */}
       {otros.length > 0 && (
         <section>
           <h2 className="text-lg font-bold text-slate-500 uppercase tracking-widest mb-4">Otros Mercados Activos</h2>
