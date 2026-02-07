@@ -12,8 +12,6 @@ Route::get('/analisis-agente', function () {
 
     $rawData = $service->getMatchesByDate('20260206');
     
-    // Basado en el JSON que viste en Tinker, los partidos están en esta ruta:
-    // Nota: Ajustamos la profundidad del array según tu captura anterior
     $matches = $rawData['response']['matches'] ?? []; 
 
     return response()->json([

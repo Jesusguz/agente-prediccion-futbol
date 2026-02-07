@@ -13,17 +13,21 @@ export default function PredictorDashboard() {
   const [data, setData] = useState<Prediccion[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchPredictions = async () => {
+ const fetchPredictions = async () => {
     try {
-      // Usa tu URL de Railway aquí
-      const response = await fetch('https://tu-proyecto.up.railway.app/analisis-agente');
-      const json = await response.json();
-      setData(json.predicciones);
-      setLoading(false);
+    
+        const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+        const response = await fetch(`${baseUrl}/api/analisis-agente`); 
+        
+        if (!response.ok) throw new Error('Error en la red');
+        
+        const json = await response.json();
+        setData(json.predicciones);
+        setLoading(false);
     } catch (error) {
-      console.error("Error al sincronizar con Lía:", error);
+        console.error("Lía no responde en esta ruta:", error);
     }
-  };
+};
 
   useEffect(() => {
     fetchPredictions();
