@@ -9,50 +9,57 @@ Route::get('/analisis-agente', function () {
     try {
         $service = new App\Services\FootballService();
         $agent = new App\Services\PredictionAgent();
+
         $rawData = $service->getMatchesByDate(date('Ymd'));
         
-        if (!isset($rawData['response'])) return response()->json(['status' => 'error', 'message' => 'No response']);
+        if (!isset($rawData['response'])) {
+            return response()->json([
+                'status' => 'debug',
+                'message' => 'API externa no respondió con la estructura esperada.',
+                'raw_preview' => substr(json_encode($rawData), 0, 150)
+            ], 200);
+        }
 
-        $matches = collect($rawData['response'])->flatten(1);
+        $matches = collect($rawData['response'])
+            ->flatten(1)
+            ->filter(function($item) {
+                // 1. Validación de seguridad básica
+                if (!is_array($item) || !isset($item['home']) || !isset($item['status'])) {
+                    return false;
+                }
+                
+                // 2. CORRECCIÓN DEL ERROR: Validamos que 'reason' sea string antes de transformar
+                $rawReason = $item['status']['reason'] ?? '';
+                $reason = is_string($rawReason) ? strtoupper($rawReason) : '';
+                $statusType = strtolower($item['status']['type'] ?? '');
 
-        // --- BLOQUE DE DEPURACIÓN PARA TI ---
-        // Esto nos dirá qué estados existen en los partidos actuales
-        $debugEstados = $matches->map(function($m) {
-            return [
-                'name' => ($m['home']['name'] ?? 'Unknown') . ' vs ' . ($m['away']['name'] ?? 'Unknown'),
-                'type' => $m['status']['type'] ?? 'N/A',
-                'reason' => $m['status']['reason'] ?? 'N/A'
-            ];
-        })->take(10)->toArray(); 
-
-        $filtered = $matches->filter(function($item) {
-            if (!isset($item['status'])) return false;
-            
-            // Filtro más agresivo:
-            $type = strtolower($item['status']['type'] ?? '');
-            $reason = strtoupper($item['status']['reason'] ?? '');
-
-            // Si el tipo es 'finished' o la razón es 'FT', lo quitamos
-            $esTerminado = in_array($reason, ['FT', 'FINISHED', 'ENDED', 'AET', 'PEN', 'FULL TIME']) 
-                           || $type === 'finished' 
-                           || $type === 'closed';
-
-            return !$esTerminado;
-        })->values();
+                // 3. Filtro estricto de estados terminados
+                $terminados = ['FT', 'FINISHED', 'ENDED', 'AET', 'PEN', 'FULL TIME'];
+                return !in_array($reason, $terminados) && $statusType !== 'finished';
+            })
+            ->map(function($match) {
+                // Aseguramos que el tiempo sea un string legible para el Frontend
+                $match['time'] = is_string($match['status']['reason'] ?? null) 
+                    ? $match['status']['reason'] 
+                    : 'Live';
+                return $match;
+            })
+            ->values()
+            ->toArray();
 
         return response()->json([
             'status' => 'success',
-            'debug_info' => $debugEstados, // Veremos esto en el monitor rojo
-            'total_partidos_api' => $matches->count(),
-            'total_tras_filtro' => $filtered->count(),
-            'predicciones' => $agent->analyzeMatches($filtered->toArray())
+            'debug_info' => array_slice($matches, 0, 5), // Muestra los primeros 5 para depurar
+            'total_activos' => count($matches),
+            'predicciones' => $agent->analyzeMatches($matches)
         ]);
 
     } catch (\Throwable $e) {
         return response()->json([
             'status' => 'fatal_error',
             'message' => $e->getMessage(),
-            'debug_raw' => "Revisa si 'status' es un string o array"
-        ], 200);
+            'file' => $e->getFile(),
+            'line' => $e->getLine()
+        ], 200); 
     }
 });
