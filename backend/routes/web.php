@@ -6,24 +6,27 @@ use App\Services\FootballService;
 use App\Services\PredictionAgent;
 
 Route::get('/analisis-agente', function () {
-    $service = new FootballService();
-    $agent = new PredictionAgent();
+    $service = new App\Services\FootballService();
+    $agent = new App\Services\PredictionAgent();
 
-    $rawData = $service->getMatchesByDate('20260206');
     
-    // Navegamos por la estructura que vimos en tu Tinker:
-    // response -> [0] (la fecha) -> [0] (la liga o bloque)
-    $matches = data_get($rawData, 'response.0.0', []);
-
-    // Si sigue saliendo 1 o vacío, intentamos aplanarlo para encontrar los partidos
-    if (count($matches) < 2) {
-        $matches = collect($rawData)->flatten(3)->whereNotNull('home')->toArray();
+    
+    $rawData = $service->getMatchesByDate(date('Ymd'));
+    
+    
+    $matches = [];
+    if (isset($rawData['response'])) {
+    
+        $matches = collect($rawData['response'])->flatten(1)->filter(function($item) {
+            return isset($item['home']);
+        })->toArray();
     }
 
     return response()->json([
         'agente_name' => 'Lía Predictor V1',
-        'status' => 'Conectado',
+        'status' => 'Analizando ligas internacionales',
+        'fecha' => date('d-m-Y'),
         'total_partidos' => count($matches),
-        'analisis' => $agent->analyzeMatches($matches)
+        'predicciones' => $agent->analyzeMatches($matches)
     ]);
 });
