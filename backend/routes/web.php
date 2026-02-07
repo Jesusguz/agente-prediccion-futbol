@@ -8,30 +8,47 @@ use App\Services\PredictionAgent;
 Route::get('/analisis-agente', function () {
     try {
         $service = new App\Services\FootballService();
+        $agent = new App\Services\PredictionAgent();
+
+        // Nota: Si date('Ymd') te sigue dando solo partidos pasados, 
+        // revisa si el servicio tiene un método getLiveMatches()
         $rawData = $service->getMatchesByDate(date('Ymd'));
         
-        if (!isset($rawData['response'])) {
-            return response()->json(['status' => 'debug', 'message' => 'Sin respuesta de API']);
-        }
+        if (!isset($rawData['response'])) return response()->json(['status' => 'error']);
 
-        // Aplanamos y tomamos el primer partido para inspeccionarlo
-        $allMatches = collect($rawData['response'])->flatten(1);
-        $sampleMatch = $allMatches->first();
+        $matches = collect($rawData['response'])
+            ->flatten(1)
+            ->filter(function($item) {
+                // 1. Verificación de seguridad
+                if (!isset($item['status'])) return false;
+
+                // 2. FILTRO DEFINITIVO: Usamos la propiedad 'finished' que vimos en el JSON
+                $isFinished = $item['status']['finished'] ?? true;
+                $isCancelled = $item['status']['cancelled'] ?? false;
+                $started = $item['status']['started'] ?? false;
+
+                // Solo queremos partidos que hayan empezado y NO hayan terminado
+                return $started && !$isFinished && !$isCancelled;
+            })
+            ->map(function($match) {
+                // Extraemos el texto del tiempo correctamente del objeto 'reason'
+                $match['time'] = $match['status']['reason']['short'] ?? 'Live';
+                return $match;
+            })
+            ->values()
+            ->toArray();
 
         return response()->json([
-            'status' => 'debug_mode_active',
-            'message' => 'Inspección de datos crudos',
-            // Enviamos el partido completo para ver sus llaves reales
-            'debug_info' => [
-                'full_structure' => $sampleMatch,
-                'status_keys' => isset($sampleMatch['status']) ? array_keys((array)$sampleMatch['status']) : 'Sin status'
-            ]
+            'status' => 'success',
+            'total_en_vivo' => count($matches),
+            'predicciones' => $agent->analyzeMatches($matches)
         ]);
 
     } catch (\Throwable $e) {
         return response()->json([
             'status' => 'fatal_error',
-            'message' => $e->getMessage() . " en " . $e->getFile() . ":" . $e->getLine()
+            'message' => $e->getMessage(),
+            'debug_info' => 'Error en el filtro de estados'
         ], 200);
     }
 });
